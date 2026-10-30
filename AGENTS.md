@@ -416,7 +416,12 @@ Request fields mapped in `request/resolver.rs`:
   them with the captured **XHR** set (`accept: */*`, `sec-fetch-dest: empty`, `mode: cors`,
   `site: same-origin` — `cross-site` for token endpoints — `sec-ch-ua-platform: "Windows"`,
   plus `referer`). Header-by-header evidence: `docs/development.md` (echo server vs capture).
-  The 2026-09 note that "desktop Chrome UA is blocked by WAF 202" no longer holds.
+  The 2026-09 note that "desktop Chrome UA is blocked by WAF 202" is **not** reliably obsolete:
+  on 2026-10-30, from a Serbian IP, `POST /users/login` with a desktop UA still got `202` +
+  `x-amzn-waf-action: challenge` (also under `chrome136`/`web` in the container), while the
+  Android identity (`DeepSeek/2.5.0 Android/35`, `okhttp4_12`, `client_platform = android`)
+  passed. Treat a login-time 202 as an *identity* problem first, a proxy problem second; the
+  Android profile also needs `completion_body` to drop `source` (see client.rs).
 - **HIF risk tokens** (`hif_enabled`, default true): the official client polls **two**
   isomorphic endpoints (`hif-leim.deepseek.com` / `hif-dliq.deepseek.com`), caches both
   (`hif_leim_cached` / `hif_dliq_cached`, TTL from `x-hif-ttl`, default 600s) and attaches

@@ -296,7 +296,7 @@ pub struct StopStreamPayload {
     pub message_id: i64,
 }
 
-/// Check if a response is an AWS WAF Challenge (US IP restriction)
+/// Check if a response is an AWS WAF Challenge (US IP or client identity)
 fn is_waf_challenge(resp: &wreq::Response) -> bool {
     resp.status().as_u16() == 202 && resp.headers().get("x-amzn-waf-action").is_some()
 }
@@ -305,10 +305,12 @@ fn is_waf_challenge(resp: &wreq::Response) -> bool {
 fn print_waf_hint() {
     warn!(target: "ds_core::client", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     warn!(target: "ds_core::client", "  AWS WAF Challenge detected.");
-    warn!(target: "ds_core::client", "  DeepSeek CloudFront WAF blocks US-based IPs.");
     warn!(target: "ds_core::client", "  Rust HTTP clients can't execute the JS challenge.");
+    warn!(target: "ds_core::client", "  Likely causes: a US egress IP, or a client identity the WAF challenges");
+    warn!(target: "ds_core::client", "  (a desktop UA on login gets 202; the Android identity usually passes:");
+    warn!(target: "ds_core::client", "  emulation = okhttp4_12, client_platform/client_os = android).");
     warn!(target: "ds_core::client", "");
-    warn!(target: "ds_core::client", "  To fix this, configure a non-US proxy in config.toml:");
+    warn!(target: "ds_core::client", "  If the IP is the cause, configure a non-US proxy in config.toml:");
     warn!(target: "ds_core::client", "    [proxy]");
     warn!(target: "ds_core::client", "    url = \"http://127.0.0.1:7890\"");
     warn!(target: "ds_core::client", "");
@@ -647,7 +649,7 @@ impl DsClient {
             print_waf_hint();
             return Err(ClientError::Status {
                 status: 202,
-                body: "WAF Challenge: use a non-US proxy".into(),
+                body: "WAF Challenge: use a non-US proxy or the Android client identity".into(),
             });
         }
 
