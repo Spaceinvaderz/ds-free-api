@@ -961,6 +961,15 @@ fn account_x_device_id(creds: &AccountConfig, client: &DsClient) -> String {
     client.device_id().to_string()
 }
 
+/// 账号同时配置了 email 与 mobile。
+///
+/// 实测（email + mobile + area_code 同时填写）登录返回 `422 {"detail":[{"loc":"body"}]}`，
+/// 清空 mobile / area_code 后正常。文档约定二选一，这里只告警、不拒绝，
+/// 避免破坏既有配置。
+const fn mixes_login_identities(creds: &AccountConfig) -> bool {
+    !creds.email.is_empty() && !creds.mobile.is_empty()
+}
+
 async fn try_init_account(
     creds: &AccountConfig,
     client: &DsClient,
@@ -972,6 +981,19 @@ async fn try_init_account(
         return Err(PoolError::Validation(
             "email 和 mobile 不能同时为空".to_string(),
         ));
+    }
+
+    if mixes_login_identities(creds) {
+        let id = if creds.email.is_empty() {
+            creds.mobile.as_str()
+        } else {
+            creds.email.as_str()
+        };
+        warn!(
+            target: "ds_core::accounts",
+            "account {id} sets both email and mobile; upstream may reject the login with \
+             `422 body`. Use either email, or mobile + area_code, and leave the other empty."
+        );
     }
 
     // 设备身份按账号派生（空 device_id 时回退到全局配置的 X-Device-Id）
@@ -1490,5 +1512,15 @@ mod tests {
             }
         }
         assert!(by_device.is_empty());
+    }
+
+    #[test]
+    fn mixes_login_identities_only_when_both_set() {
+        let mut c = account("a@example.com", "dev");
+        assert!(!mixes_login_identities(&c));
+        c.mobile = "13800138000".to_string();
+        assert!(mixes_login_identities(&c));
+        c.email.clear();
+        assert!(!mixes_login_identities(&c));
     }
 }
