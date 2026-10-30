@@ -966,7 +966,7 @@ fn account_x_device_id(creds: &AccountConfig, client: &DsClient) -> String {
 /// 实测（email + mobile + area_code 同时填写）登录返回 `422 {"detail":[{"loc":"body"}]}`，
 /// 清空 mobile / area_code 后正常。文档约定二选一，这里只告警、不拒绝，
 /// 避免破坏既有配置。
-fn mixes_login_identities(creds: &AccountConfig) -> bool {
+const fn mixes_login_identities(creds: &AccountConfig) -> bool {
     !creds.email.is_empty() && !creds.mobile.is_empty()
 }
 
