@@ -761,6 +761,20 @@ impl DsClient {
         Ok(challenge)
     }
 
+    /// 序列化 completion 请求体，按客户端平台裁剪字段。
+    ///
+    /// `source` 是网页前端的字段；安卓端点的枚举只认 `default` / `landing`，
+    /// 带 `input` 会返回 422（`unknown variant`），所以非 web 平台直接省略。
+    fn completion_body(&self, payload: &CompletionPayload) -> serde_json::Value {
+        let mut body = serde_json::to_value(payload).unwrap_or(serde_json::Value::Null);
+        if self.identity.client_platform != "web"
+            && let Some(obj) = body.as_object_mut()
+        {
+            obj.remove("source");
+        }
+        body
+    }
+
     pub async fn completion(
         &self,
         token: &str,
@@ -769,11 +783,12 @@ impl DsClient {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, ClientError>> + Send>>, ClientError> {
         let mut headers = self.auth_headers_with_pow(token, pow_response)?;
         self.attach_hif(&mut headers).await?;
+        let body = self.completion_body(payload);
         let resp = self
             .http
             .post(format!("{}{}", self.api_base, ENDPOINT_CHAT_COMPLETION))
             .headers(headers)
-            .json(payload)
+            .json(&body)
             .send()
             .await?;
 
@@ -1202,5 +1217,35 @@ mod tests {
         let empty: FetchSessionsData = serde_json::from_str(r#"{"chat_sessions":[]}"#).unwrap();
         assert!(empty.chat_sessions.is_empty());
         assert_eq!(empty.has_more, None);
+    }
+
+    #[test]
+    fn completion_body_omits_source_off_web() {
+        let payload = CompletionPayload {
+            chat_session_id: "s".to_string(),
+            parent_message_id: None,
+            model_type: "default".to_string(),
+            prompt: "p".to_string(),
+            ref_file_ids: vec![],
+            thinking_enabled: false,
+            search_enabled: false,
+            action: None,
+            source: COMPLETION_SOURCE_INPUT,
+            preempt: false,
+        };
+        let android = test_client();
+        assert!(android.completion_body(&payload).get("source").is_none());
+
+        let mut identity = test_identity();
+        identity.client_platform = "web".to_string();
+        let web = DsClient::new(
+            "https://chat.deepseek.com/api/v0".to_string(),
+            "https://example.com/x.wasm".to_string(),
+            identity,
+            &HifConfig::default(),
+            EmulationProfile::default(),
+            None,
+        );
+        assert_eq!(web.completion_body(&payload)["source"], "input");
     }
 }
