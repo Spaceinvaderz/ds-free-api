@@ -649,7 +649,7 @@ impl DsClient {
             print_waf_hint();
             return Err(ClientError::Status {
                 status: 202,
-                body: "WAF Challenge: use a non-US proxy".into(),
+                body: "WAF Challenge: use a non-US proxy or the Android client identity".into(),
             });
         }
 
